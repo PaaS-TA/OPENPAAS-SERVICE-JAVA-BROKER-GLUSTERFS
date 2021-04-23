@@ -1,11 +1,13 @@
 buildscript {
     ext {
-        gradleVersion = '4.9'
+        gradleVersion = '5.0'
         springBootVersion = '1.5.14.RELEASE'
     }
     repositories {
-        maven { url "https://repo.spring.io/libs-snapshot" }
-        mavenLocal()
+        maven { url "http://repo.spring.io/libs-snapshot" }
+        maven { url "https://repo.spring.io/plugins-release"}
+        maven { url "https://repo.spring.io/milestone"}
+        mavenCentral()
     }
     dependencies {
         classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
@@ -52,7 +54,9 @@ jar {
 
 repositories {
     mavenCentral()
-    maven { url "https://repo.spring.io/libs-snapshot" }
+    maven { url "http://repo.spring.io/libs-snapshot" }
+    maven { url "https://repo.spring.io/plugins-release"}
+    maven { url "https://repo.spring.io/milestone"}
 }
 
 configurations {
@@ -77,15 +81,16 @@ dependencies {
     compile("org.apache.httpcomponents:httpclient:4.4.1")
 	compile("org.apache.commons:commons-dbcp2")
     //runtime "mysql:mysql-connector-java:5.1.27"
-    compile ('org.mariadb.jdbc:mariadb-java-client:1.2.0') {
+    /*[20210401]compile ('org.mariadb.jdbc:mariadb-java-client:1.2.0') {
         exclude group: 'net.java.dev.jna'
-    }
+    }*/
+    runtime("org.mariadb.jdbc:mariadb-java-client:2.2.6")
     compile "org.springframework:spring-jdbc:4.0.0.M3"
 }
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '4.9'
-}
+//task wrapper(type: Wrapper) {
+//    gradleVersion = '5.0'
+//}
 
 apply plugin: 'jacoco'
 
