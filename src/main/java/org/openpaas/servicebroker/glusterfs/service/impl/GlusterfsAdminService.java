@@ -4,10 +4,9 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
 import org.openpaas.servicebroker.common.HttpClientUtils;
 import org.openpaas.servicebroker.common.JsonUtils;
 import org.openpaas.servicebroker.exception.ServiceBrokerException;
@@ -111,7 +110,8 @@ public class GlusterfsAdminService {
 		ServiceInstance serviceInstance = null;;
 		try {
 			serviceInstance = jdbcTemplate.queryForObject(SERVICE_INSTANCES_FIND_BY_INSTANCE_ID, mapper, id);
-			serviceInstance.withDashboardUrl(getDashboardUrl(serviceInstance.getServiceInstanceId()));
+			if (serviceInstance != null)
+				serviceInstance.withDashboardUrl(getDashboardUrl(serviceInstance.getServiceInstanceId()));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -198,6 +198,20 @@ public class GlusterfsAdminService {
 	public void save(ServiceInstance serviceInstance, GlusterfsServiceInstance gf) throws GlusterfsServiceException{
 		try{
 			logger.debug("GlusterfsAdminService.save");
+		        logger.debug("serviceInstance.getServiceInstanceId()="+serviceInstance.getServiceInstanceId());
+		        logger.debug("serviceInstance.getServiceDefinitionId()="+serviceInstance.getServiceDefinitionId());
+		        logger.debug("serviceInstance.getPlanId()="+serviceInstance.getPlanId());
+		        logger.debug("serviceInstance.getOrganizationGuid()="+serviceInstance.getOrganizationGuid());
+		        logger.debug("serviceInstance.getSpaceGuid()="+serviceInstance.getSpaceGuid());
+		        logger.debug("gf.getTenantName()="+gf.getTenantName());
+		        logger.debug("gf.getTenantId()="+gf.getTenantId());
+		        logger.debug("serviceInstance.getServiceInstanceId()="+serviceInstance.getServiceInstanceId());
+		        logger.debug("serviceInstance.getServiceDefinitionId()="+serviceInstance.getServiceDefinitionId());
+		        logger.debug("serviceInstance.getPlanId()="+serviceInstance.getPlanId());
+		        logger.debug("serviceInstance.getOrganizationGuid()="+serviceInstance.getOrganizationGuid());
+		        logger.debug("serviceInstance.getSpaceGuid()="+serviceInstance.getSpaceGuid());
+		        logger.debug("gf.getTenantName()="+gf.getTenantName());
+		        logger.debug("gf.getTenantId()="+gf.getTenantId());
 			jdbcTemplate.update(SERVICE_INSTANCES_ADD, 
 					serviceInstance.getServiceInstanceId(),
 					serviceInstance.getServiceDefinitionId(),
@@ -299,20 +313,22 @@ public class GlusterfsAdminService {
 									"}" + 
 								"}" + 
 						"}";
-		
+
+		logger.debug("[paasta] 317 body : " + body);
 		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
 		ResponseEntity<String> response = null;
 		
 		try{
-				
 			String url = env.getRequiredProperty("glusterfs.authurl") + env.getRequiredProperty("glusterfs.uri.auth");
-			
+			logger.debug("[paasta] 323 url : " + url);
+
 			response = HttpClientUtils.send(url, entity, HttpMethod.POST);
 			
 			if (response.getStatusCode() != HttpStatus.OK) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
 
 			JsonNode json = JsonUtils.convertToJson(response);
-			
+			logger.debug("[paasta] 330 json: " + json.toString());
+
 			setAuthToken(json);
 			
 		} catch (Exception e) {
@@ -327,12 +343,15 @@ public class GlusterfsAdminService {
 	 */
 	private void setAuthToken(JsonNode json) {
 		logger.debug("json : " + json.toString());
-		
+
 		String authToken = json.get("access").get("token").get("id").asText();
-		
+		String expires = json.get("access").get("token").get("expires").asText();
+
 		logger.debug("authToken : " + authToken);
-		
+		logger.debug("[paasta] 351 expires : " + expires);
+
 		ConstantsAuthToken.AUTH_TOKEN = authToken;
+		//ConstantsAuthToken.EXPIRES= expires;
 		
 	}
 	
@@ -346,11 +365,20 @@ public class GlusterfsAdminService {
 		
 		logger.debug("GlusterfsAdminService.getGlusterfsAuthToken");
 		HttpHeaders headers = new HttpHeaders();	
-		headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+		Date date = new Date(System.currentTimeMillis());
+//		setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
-		if(planId.equals(planA)) {headers.set("X-Account-Meta-Quota-Bytes", planAsize+"");}
-		else if(planId.equals(planB)) {headers.set("X-Account-Meta-Quota-Bytes", planBsize+"");}
-		else if(planId.equals(planC)) {headers.set("X-Account-Meta-Quota-Bytes", planCsize+"");}
+		if(planId.equals(planA)) {
+			headers.set("X-Container-Meta-Quota-Bytes", planAsize+"");
+		}
+		else if(planId.equals(planB)) {
+			headers.set("X-Container-Meta-Quota-Bytes", planBsize+"");
+		}
+		else if(planId.equals(planC)) {
+			headers.set("X-Container-Meta-Quota-Bytes", planCsize+"");
+		}
 		else{
 			throw new ServiceBrokerException("");
 		}
@@ -358,16 +386,19 @@ public class GlusterfsAdminService {
 		
 		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
 		ResponseEntity<String> response = null;
-		logger.debug("body : " + body);
+
 		try{
 				
 			String url = env.getRequiredProperty("glusterfs.swiftproxy") + env.getRequiredProperty("glusterfs.uri.account");
 			logger.debug("url : " + url);
+			logger.debug("[paasta] 394 url = "+url+" = ");
 			url = url.replace("#TENANT_ID", tenantId);
-			
-			response = HttpClientUtils.send(url, entity, HttpMethod.POST);
-			
-			if (response.getStatusCode() != HttpStatus.NO_CONTENT) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
+			logger.debug("[paasta] 396 url = "+url+" = ");
+
+			response = HttpClientUtils.send(url, entity, HttpMethod.PUT);
+			logger.debug("[paasta] 399 response.getStatusCode() = "+response.getStatusCode()+" = ");
+
+			if (response.getStatusCode() != HttpStatus.NO_CONTENT && response.getStatusCode() != HttpStatus.CREATED) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -451,7 +482,11 @@ public class GlusterfsAdminService {
 		HttpHeaders headers = new HttpHeaders();	
 		headers.setContentType(MediaType.APPLICATION_JSON);
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
-		String body = 	"{" + 
+		logger.debug("[paasta] 485 AUTH_TOKEN1 :" + ConstantsAuthToken.AUTH_TOKEN +"=");
+		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+			setGlusterfsAuthToken();
+		logger.debug("[paasta] 488 AUTH_TOKEN2 : " + ConstantsAuthToken.AUTH_TOKEN);
+		String body = 	"{" +
 				"\"tenant\": " +
 				    "{" + 
 					"\"name\": \"" + getTenantName(serviceInstance.getServiceInstanceId()) + "\"," + 
@@ -462,22 +497,31 @@ public class GlusterfsAdminService {
 		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
 		ResponseEntity<String> response = null;
 		logger.debug("body : " + body);
+		logger.debug("[paasta] 500 body : " + body);
+
 		GlusterfsServiceInstance glusterfsServiceInstance = null;
 		
 		try{
 				
 			String url = env.getRequiredProperty("glusterfs.endpoint") + env.getRequiredProperty("glusterfs.uri.createtenant");
 			logger.debug("url : " + url);
-			
+			logger.debug("[paasta] 508 url : " + url);
+			if (serviceInstance != null)
+				logger.debug("[paasta] 510 planId="+serviceInstance.getPlanId()+"=");
+			if (glusterfsServiceInstance != null)
+				logger.debug("[paasta] 512 planId="+serviceInstance.getPlanId()+"=tenantId="+ glusterfsServiceInstance.getTenantId()+"=");
+
 			response = HttpClientUtils.send(url, entity, HttpMethod.POST);
-			
+
 			JsonNode json = JsonUtils.convertToJson(response);
-			
+			logger.debug("[paasta] 517 json ="+json +"=");
+
 			glusterfsServiceInstance = new GlusterfsServiceInstance(serviceInstance);
-			
+            logger.debug("[paasta] 520 getTenantId=" + glusterfsServiceInstance.getTenantId()+"=getServiceInstanceId="+glusterfsServiceInstance.getServiceInstanceId());
 			setTenantInfo(json,glusterfsServiceInstance);
-			
-			setGlusterfsQuota(serviceInstance.getPlanId(), glusterfsServiceInstance.getTenantId());
+            logger.debug("[paasta] 522 getTenantId=" + glusterfsServiceInstance.getTenantId()+"=getServiceInstanceId="+glusterfsServiceInstance.getServiceInstanceId());
+
+            setGlusterfsQuota(serviceInstance.getPlanId(), glusterfsServiceInstance.getTenantId());
 			
 			if (response.getStatusCode() != HttpStatus.OK) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
 
@@ -501,7 +545,7 @@ public class GlusterfsAdminService {
 	
 	private void setTenantInfo(JsonNode json, GlusterfsServiceInstance glusterfsServiceInstance) {
 		logger.debug("json : " + json.toString());
-		
+        	logger.debug("[paasta] setTenantInfo=" +json.toString());
 		glusterfsServiceInstance.setTenantId(json.get("tenant").get("id").asText());
 		glusterfsServiceInstance.setTenantName(json.get("tenant").get("name").asText());
 		
