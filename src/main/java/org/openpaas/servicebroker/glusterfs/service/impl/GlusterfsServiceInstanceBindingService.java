@@ -96,7 +96,7 @@ public class GlusterfsServiceInstanceBindingService implements ServiceInstanceBi
 		credentials.put("provider", "swift-keystone");
 		credentials.put("username", username);
 		credentials.put("password", password);
-		credentials.put("auth_url", env.getRequiredProperty("glusterfs.authurl")+"/v2.0");
+		credentials.put("auth_url", env.getRequiredProperty("glusterfs.authurl")+"/v3");
 		binding = new ServiceInstanceBinding(request.getBindingId(), instance.getServiceInstanceId(), credentials, null, request.getAppGuid());
 		
 		// Binding 정보를 저장합니다.
@@ -161,7 +161,7 @@ public class GlusterfsServiceInstanceBindingService implements ServiceInstanceBi
 		credentials.put("provider", "swift-keystone");
 		credentials.put("username", username);
 		credentials.put("password", password);
-		credentials.put("auth_url", env.getRequiredProperty("glusterfs.authurl")+"/v2.0");
+		credentials.put("auth_url", env.getRequiredProperty("glusterfs.authurl")+"/v3");
 		
 		return new ServiceInstanceBinding(request.getBindingId(), instance.getServiceInstanceId(), credentials, null, request.getAppGuid());
 		

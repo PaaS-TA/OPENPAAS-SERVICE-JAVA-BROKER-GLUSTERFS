@@ -52,16 +52,16 @@ public class GlusterfsServiceInstanceService implements ServiceInstanceService {
 
 		/* 최초 ServiceInstance 생성 요청시에는 해당 ServiceInstance가 존재하지 않아 해당 메소드를 주석처리 하였습니다.*/
 		ServiceInstance findInstance = glusterfsAdminService.findById(request.getServiceInstanceId());
-		logger.debug("[paasta] 55 findInstance=", findInstance);
+		logger.debug("[paasta] findInstance=", findInstance);
 
 		// 요청 정보로부터 ServiceInstance정보를 생성합니다.
 		ServiceInstance instance = null;
 		if (findInstance == null) {
 			instance = glusterfsAdminService.createServiceInstanceByRequest(request);
 			if (instance == null )
-				logger.debug("[paasta] 62 instance=", instance);
+				logger.debug("[paasta] instance=", instance);
 			else
-				logger.debug("[paasta] 64 instance=", instance.getServiceInstanceId());
+				logger.debug("[paasta] instance=", instance.getServiceInstanceId());
 		}
 		if(findInstance != null){
 			if(findInstance.getServiceInstanceId().equals(instance.getServiceInstanceId()) &&
@@ -76,7 +76,7 @@ public class GlusterfsServiceInstanceService implements ServiceInstanceService {
 		
 		// Database를 생성합니다.
 		GlusterfsServiceInstance gf = glusterfsAdminService.createTenant(instance);
-		logger.debug("[paasta] 79 gf.ServiceInstanceId="+gf.getServiceInstanceId()+"=gf.TenantId="+gf.getTenantId());
+		logger.debug("[paasta] gf.ServiceInstanceId="+gf.getServiceInstanceId()+"=gf.TenantId="+gf.getTenantId());
 		
 		// ServiceInstance 정보를 저장합니다.
 		glusterfsAdminService.save(instance, gf);
