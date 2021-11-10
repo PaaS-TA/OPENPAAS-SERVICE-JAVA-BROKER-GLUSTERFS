@@ -4,9 +4,6 @@ buildscript {
         springBootVersion = '1.5.14.RELEASE'
     }
     repositories {
-        maven { url "http://repo.spring.io/libs-snapshot" }
-        maven { url "https://repo.spring.io/plugins-release"}
-        maven { url "https://repo.spring.io/milestone"}
         mavenCentral()
     }
     dependencies {
@@ -54,9 +51,13 @@ jar {
 
 repositories {
     mavenCentral()
-    maven { url "http://repo.spring.io/libs-snapshot" }
-    maven { url "https://repo.spring.io/plugins-release"}
     maven { url "https://repo.spring.io/milestone"}
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+    }
 }
 
 configurations {
