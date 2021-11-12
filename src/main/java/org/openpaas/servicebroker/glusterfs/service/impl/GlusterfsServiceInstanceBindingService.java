@@ -89,6 +89,9 @@ public class GlusterfsServiceInstanceBindingService implements ServiceInstanceBi
 		// 새로운 사용자를 생성합니다.
 		glusterfsAdminService.createUser(gf.getTenantId(), username, password);
 
+		// 새로운 사용자에 member role을  할당합니다.
+		glusterfsAdminService.assignRole(gf.getTenantId(), glusterfsAdminService.getGlusterfsUserIdByUserName(username));
+
 		// 반환될 credentials 정보를 생성합니다.
 		Map<String,Object> credentials = new HashMap<String,Object>();
 		credentials.put("tenantname", gf.getTenantName());

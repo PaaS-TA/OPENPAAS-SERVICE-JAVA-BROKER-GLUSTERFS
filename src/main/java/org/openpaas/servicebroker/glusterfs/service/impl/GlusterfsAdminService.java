@@ -377,15 +377,15 @@ public class GlusterfsAdminService {
 	 */
 	public void setGlusterfsQuota(String planId, String tenantId) throws ServiceBrokerException{
 		
-		logger.debug("GlusterfsAdminService.getGlusterfsAuthToken");
+		logger.debug("GlusterfsAdminService.setGlusterfsQuota");
 		HttpHeaders headers = new HttpHeaders();	
 		headers.setContentType(MediaType.APPLICATION_JSON);
 		SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
 		Date date = new Date(System.currentTimeMillis());
-//		setGlusterfsAuthToken();
 		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
+		logger.debug("planId="+planId);
 		if(planId.equals(planA)) {
 			headers.set("X-Container-Meta-Quota-Bytes", planAsize+"");
 		}
@@ -408,11 +408,12 @@ public class GlusterfsAdminService {
 			String url = env.getRequiredProperty("glusterfs.swiftproxy") + env.getRequiredProperty("glusterfs.uri.account");
 			logger.debug("url : " + url);
 			url = url.replace("#TENANT_ID", tenantId);
+                        logger.debug("header[X-Container-Meta-Quota-Bytes] : " + headers.get("X-Container-Meta-Quota-Bytes").get(0));
 
 			response = HttpClientUtils.send(url, entity, HttpMethod.PUT);
 			logger.debug("[paasta] response.getStatusCode() = "+response.getStatusCode()+" = ");
 
-			if (response.getStatusCode() != HttpStatus.NO_CONTENT && response.getStatusCode() != HttpStatus.CREATED) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
+			if (response.getStatusCode() != HttpStatus.ACCEPTED && response.getStatusCode() != HttpStatus.CREATED) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -482,6 +483,22 @@ public class GlusterfsAdminService {
 		
 		return userId;
 		
+	}
+
+	/**
+	 * ROLE 아이디 추출
+	 * @param json
+	 * @return
+	 */
+	private String getRoleId(JsonNode json) {
+		logger.debug("json : " + json.toString());
+		logger.debug("json : " + json.get("roles").get(0));
+		logger.debug("json : " + json.get("roles").get(0).get("id"));
+
+		String roleId = json.get("roles").get(0).get("id").asText();
+
+		return roleId;
+
 	}
 	
 	/**
@@ -562,6 +579,102 @@ public class GlusterfsAdminService {
 		glusterfsServiceInstance.setTenantId(json.get("project").get("id").asText());
 		glusterfsServiceInstance.setTenantName(json.get("project").get("name").asText());
 		
+	}
+
+	/**
+	 * keystone에 정의된 role ID 를 조회합니다.
+	 * @param roleName
+	 * @throws GlusterfsServiceException
+	 */
+	public String getGlusterfsRolesIdByRoleName(String roleName) throws GlusterfsServiceException{
+		logger.debug("GlusterfsAdminService.getRoles");
+		String roleId = "";
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+			setGlusterfsAuthToken();
+		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
+		String body = 	"";
+		logger.debug("body : " + body);
+		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
+		ResponseEntity<String> response = null;
+
+		try{
+			// glusterfs.uri.roleinfo=/v3/roles?name=#ROLE_NAME
+			String url = env.getRequiredProperty("glusterfs.endpoint") + env.getRequiredProperty("glusterfs.uri.roleinfo");
+			url = url.replace("#ROLE_NAME", roleName);
+			logger.debug("url : " + url);
+
+			response = HttpClientUtils.send(url, entity, HttpMethod.GET);
+
+			if (response.getStatusCode() != HttpStatus.OK) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
+
+			JsonNode json = JsonUtils.convertToJson(response);
+
+			roleId = getRoleId(json);
+
+		} catch (ServiceBrokerException e) {
+			e.printStackTrace();
+			if (e.getMessage().equals("401 Unauthorized")) {
+				setGlusterfsAuthToken();
+			}else if(e.getMessage().equals("409 Conflict")){
+				throw new GlusterfsServiceException("Tennant exception occurred during creation.(duplicated)");
+			}else {
+				throw new GlusterfsServiceException("Tennant exception occurred during creation.");
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw handleException(e);
+		}
+		return roleId;
+	}
+
+	/**
+	 * 해당하는 User에게 role 을 할당합니다.
+	 * @param tenantId
+	 * @param userId
+	 * @throws GlusterfsServiceException
+	 */
+	public void assignRole(String tenantId, String userId) throws GlusterfsServiceException{
+		logger.debug("GlusterfsAdminService.assignRole");
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+			setGlusterfsAuthToken();
+		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
+		String body = 	"";
+		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
+		ResponseEntity<String> response = null;
+		logger.debug("body : " + body);
+
+		try{
+			//glusterfs.uri.assignrole=/v3/projects/#TENANT_ID/users/#USER_ID/roles/#ROLE_ID
+			String roleId = getGlusterfsRolesIdByRoleName(env.getRequiredProperty("glusterfs.rolename"));
+			String url = env.getRequiredProperty("glusterfs.endpoint") + env.getRequiredProperty("glusterfs.uri.assignrole");
+			url = url.replace("#TENANT_ID", tenantId);
+			url = url.replace("#USER_ID", userId);
+			url = url.replace("#ROLE_ID", roleId);
+			logger.debug("url : " + url);
+
+			response = HttpClientUtils.send(url, entity, HttpMethod.PUT);
+
+			if (response.getStatusCode() != HttpStatus.NO_CONTENT) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
+
+		} catch (ServiceBrokerException e) {
+			e.printStackTrace();
+			if (e.getMessage().equals("401 Unauthorized")) {
+				setGlusterfsAuthToken();
+			}else if(e.getMessage().equals("409 Conflict")){
+				throw new GlusterfsServiceException("Tennant exception occurred during creation.(duplicated)");
+			}else {
+				throw new GlusterfsServiceException("Tennant exception occurred during creation.");
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw handleException(e);
+		}
 	}
 	
 	/**
