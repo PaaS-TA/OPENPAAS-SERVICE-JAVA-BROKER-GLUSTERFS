@@ -4,7 +4,10 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import org.openpaas.servicebroker.common.HttpClientUtils;
@@ -37,6 +40,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.util.StringUtils;
 
 /**
  * Glusterfs대용량저장소를 조작하기위한 유틸리티 클래스.
@@ -267,7 +271,7 @@ public class GlusterfsAdminService {
 			logger.debug("GlusterfsAdminService.deleteDatabase");
 			
 			HttpHeaders headers = new HttpHeaders();	
-			if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+			if (!isValidToken())
 				setGlusterfsAuthToken();
 			headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 			String body = 	"";
@@ -297,7 +301,25 @@ public class GlusterfsAdminService {
 			throw handleException(e);
 		}
 	}
-	
+
+    /**
+     * Glusterfs 관리자 AuthToken Valid check
+     * @throws GlusterfsServiceException
+     */
+    public boolean isValidToken(){
+        boolean isValid = false;
+
+        ZonedDateTime  currentDateTime = ZonedDateTime.now(ZoneId.of(ConstantsAuthToken.GLUSTERFS_TIMEZONE));
+        //ZonedDateTime  currentDateTime = ZonedDateTime.now(ZoneId.of("Asia/Seoul"));
+
+        if (!StringUtils.isEmpty(ConstantsAuthToken.AUTH_TOKEN)
+                && ConstantsAuthToken.ISSUED_AT != null && ConstantsAuthToken.EXPIRES_AT != null
+                && currentDateTime.isBefore(ConstantsAuthToken.EXPIRES_AT))
+            isValid = true;
+
+        return isValid;
+    }
+
 	/**
 	 * Glusterfs 관리자 AuthToken 획득
 	 * @throws GlusterfsServiceException
@@ -330,21 +352,23 @@ public class GlusterfsAdminService {
 		HttpEntity<String> entity = new HttpEntity<String>(body, headers);
 		ResponseEntity<String> response = null;
 		
-		try{
-			String url = env.getRequiredProperty("glusterfs.authurl") + env.getRequiredProperty("glusterfs.uri.auth");
-			logger.debug("[paasta] url : " + url);
+		try {
+            String url = env.getRequiredProperty("glusterfs.authurl") + env.getRequiredProperty("glusterfs.uri.auth");
+            logger.debug("[paasta] url : " + url);
 
-			response = HttpClientUtils.send(url, entity, HttpMethod.POST);
-			
-			if (response.getStatusCode() != HttpStatus.OK && response.getStatusCode() != HttpStatus.CREATED) throw new ServiceBrokerException("Response code is " + response.getStatusCode());
+            response = HttpClientUtils.send(url, entity, HttpMethod.POST);
 
-			//JsonNode json = JsonUtils.convertToJson(response);
-			//logger.debug("[paasta] json: " + json.toString());
+            if (response.getStatusCode() != HttpStatus.OK && response.getStatusCode() != HttpStatus.CREATED)
+                throw new ServiceBrokerException("Response code is " + response.getStatusCode());
 
-			//setAuthToken(json);
-			if (response.getHeaders().containsKey("X-Subject-Token"))
-				ConstantsAuthToken.AUTH_TOKEN = response.getHeaders().get("X-Subject-Token").get(0);
-			
+            //JsonNode json = JsonUtils.convertToJson(response);
+            //logger.debug("[paasta] json: " + json.toString());
+
+            //setAuthToken(json);
+            if (response.getHeaders().containsKey("X-Subject-Token")){
+                ConstantsAuthToken.AUTH_TOKEN = response.getHeaders().get("X-Subject-Token").get(0);
+                setAuthToken(JsonUtils.convertToJson(response));
+            }
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw handleException(e);
@@ -355,18 +379,25 @@ public class GlusterfsAdminService {
 	 * Glusterfs 관리자 AuthToken 설정
 	 * @param json
 	 */
-	private void setAuthToken(JsonNode json) {
+	private void setAuthToken(JsonNode json) throws ParseException {
 		logger.debug("json : " + json.toString());
 
-		String authToken = json.get("access").get("token").get("id").asText();
-		String expires = json.get("access").get("token").get("expires").asText();
+		//String authToken = json.get("token").get("id").asText();
+		//logger.debug("authToken : " + authToken);
+		//ConstantsAuthToken.AUTH_TOKEN = authToken;
 
-		logger.debug("authToken : " + authToken);
-		logger.debug("[paasta] expires : " + expires);
+		String issued = json.get("token").get("issued_at").asText();
+		String expires = json.get("token").get("expires_at").asText();
 
-		ConstantsAuthToken.AUTH_TOKEN = authToken;
-		//ConstantsAuthToken.EXPIRES= expires;
-		
+        ZonedDateTime issued_at = ZonedDateTime.parse(issued); //DateTimeFormatter
+        ZonedDateTime expires_at = ZonedDateTime.parse(expires);
+
+        ConstantsAuthToken.GLUSTERFS_TIMEZONE = env.getRequiredProperty("glusterfs.timezone");
+        ConstantsAuthToken.ISSUED_AT = issued_at;
+        ConstantsAuthToken.EXPIRES_AT = expires_at;
+
+        logger.debug("[paasta] setAuthToken ISSUED_AT: " + ConstantsAuthToken.ISSUED_AT );
+        logger.debug("[paasta] setAuthToken EXPIRES_AT : " + ConstantsAuthToken.EXPIRES_AT );
 	}
 	
 	/**
@@ -382,7 +413,7 @@ public class GlusterfsAdminService {
 		headers.setContentType(MediaType.APPLICATION_JSON);
 		SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
 		Date date = new Date(System.currentTimeMillis());
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		logger.debug("planId="+planId);
@@ -436,7 +467,7 @@ public class GlusterfsAdminService {
 		
 		logger.debug("GlusterfsAdminService.getGlusterfsAuthToken");
 		HttpHeaders headers = new HttpHeaders();	
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		String body = 	"";
@@ -515,7 +546,8 @@ public class GlusterfsAdminService {
 		HttpHeaders headers = new HttpHeaders();	
 		headers.setContentType(MediaType.APPLICATION_JSON);
 		logger.debug("[paasta] AUTH_TOKEN1 :" + ConstantsAuthToken.AUTH_TOKEN +"=");
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+
+        if (!isValidToken())
 			setGlusterfsAuthToken();
 		logger.debug("[paasta] AUTH_TOKEN2 : " + ConstantsAuthToken.AUTH_TOKEN);
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
@@ -591,7 +623,7 @@ public class GlusterfsAdminService {
 		String roleId = "";
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		String body = 	"";
@@ -640,7 +672,7 @@ public class GlusterfsAdminService {
 		logger.debug("GlusterfsAdminService.assignRole");
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		String body = 	"";
@@ -736,7 +768,6 @@ public class GlusterfsAdminService {
 	
 	/**
 	 * 해당하는 User를 생성합니다.
-	 * @param database
 	 * @param userId
 	 * @param password
 	 * @throws GlusterfsServiceException
@@ -745,7 +776,7 @@ public class GlusterfsAdminService {
 		logger.debug("GlusterfsAdminService.createUser");
 		HttpHeaders headers = new HttpHeaders();	
 		headers.setContentType(MediaType.APPLICATION_JSON);
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		String body = 	"{" +
@@ -791,7 +822,6 @@ public class GlusterfsAdminService {
 	//public void deleteUser(String database, String userId) throws GlusterfsServiceException{
 	/**
 	 * 해당하는 User를 삭제합니다.
-	 * @param database
 	 * @param bindingId
 	 * @throws GlusterfsServiceException
 	 */
@@ -802,7 +832,7 @@ public class GlusterfsAdminService {
 		
 		HttpHeaders headers = new HttpHeaders();	
 		headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-		if ("".equals(ConstantsAuthToken.AUTH_TOKEN))
+		if (!isValidToken())
 			setGlusterfsAuthToken();
 		headers.set("X-Auth-Token", ConstantsAuthToken.AUTH_TOKEN);
 		String body = 	"";
